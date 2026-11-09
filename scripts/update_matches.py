@@ -11,12 +11,15 @@ from firebase_admin import credentials, firestore
 API_KEY = os.environ["API_FOOTBALL_KEY"]
 FORCE = os.environ.get("FORCE_FETCH", "false").lower() == "true"
 
-# معرفات البطولات (راجع ملاحظة التحقق من المعرفات أسفل الرد)
-LEAGUE_IDS = {
-    307,  # دوري روشن السعودي
-    305,  # دوري نجوم قطر
-    301,  # دوري الإمارات
-}
+# الدوريات التي نأخذ منها قائمة الأندية الخليجية (مرة واحدة فقط ثم تُحفظ في Firestore)
+CLUB_LEAGUES = [307, 305, 301]   # السعودية، قطر، الإمارات
+
+# المنتخبات الخليجية: نطابق بالاسم، ويشمل ذلك الشباب والسيدات
+# (مثل: Saudi Arabia U23 أو Qatar W) لأننا نبحث عن الاسم داخل اسم الفريق
+NATIONAL_KEYWORDS = [
+    "saudi arabia", "qatar", "united arab emirates", "uae",
+    "kuwait", "bahrain", "oman",
+]
 
 DAILY_LIMIT = 90                # حد أمان أقل من 100
 BEFORE_KICKOFF = timedelta(minutes=10)
@@ -85,6 +88,53 @@ def use_request_budget(db, today_str):
     return True
 
 
+def get_club_ids(db, today_str):
+    """معرفات الأندية الخليجية: تُقرأ من Firestore، وإن لم توجد تُجلب مرة واحدة فقط."""
+    ref = db.collection("meta").document("gulf_clubs")
+    snap = ref.get()
+    if snap.exists and snap.to_dict().get("ids"):
+        ids = set(snap.to_dict()["ids"])
+        print(f"عدد الأندية الخليجية (من الذاكرة): {len(ids)}")
+        return ids
+
+    ids = set()
+    for league_id in CLUB_LEAGUES:
+        teams = []
+        for season in (2026, 2025):          # نجرّب الموسم الحالي ثم السابق
+            if not use_request_budget(db, today_str):
+                break
+            r = requests.get(
+                f"{BASE_URL}/teams",
+                headers={"x-apisports-key": API_KEY},
+                params={"league": league_id, "season": season},
+                timeout=30,
+            )
+            r.raise_for_status()
+            body = r.json()
+            if body.get("errors"):
+                print(f"تنبيه من API (دوري {league_id}، موسم {season}):", body["errors"])
+            teams = body.get("response", [])
+            if teams:
+                break
+        for t in teams:
+            ids.add(t["team"]["id"])
+
+    print(f"عدد الأندية الخليجية المحفوظة: {len(ids)}")
+    if ids:
+        ref.set({"ids": sorted(ids)})
+    return ids
+
+
+def is_gulf_match(item, club_ids):
+    home, away = item["teams"]["home"], item["teams"]["away"]
+    if home["id"] in club_ids or away["id"] in club_ids:
+        return True
+    for name in (home["name"].lower(), away["name"].lower()):
+        if any(keyword in name for keyword in NATIONAL_KEYWORDS):
+            return True
+    return False
+
+
 def fetch_fixtures(today_str):
     resp = requests.get(
         f"{BASE_URL}/fixtures",
@@ -127,11 +177,19 @@ def main():
 
     if not should_fetch(db, now, today_str, start, end):
         return
+
+    club_ids = get_club_ids(db, today_str)
+
     if not use_request_budget(db, today_str):
         return
 
-    items = [i for i in fetch_fixtures(today_str) if i["league"]["id"] in LEAGUE_IDS]
-    print(f"عدد مباريات بطولاتنا اليوم: {len(items)}")
+    all_items = fetch_fixtures(today_str)
+    print(f"إجمالي مباريات العالم اليوم: {len(all_items)}")
+
+    items = [i for i in all_items if is_gulf_match(i, club_ids)]
+    print(f"عدد مباريات الفرق الخليجية اليوم: {len(items)}")
+    for i in items:
+        print(f" - {i['teams']['home']['name']} × {i['teams']['away']['name']} | {i['league']['name']}")
 
     batch = db.batch()
     for item in items:
