@@ -100,7 +100,7 @@ def get_club_ids(db, today_str):
     ids = set()
     for league_id in CLUB_LEAGUES:
         teams = []
-        for season in (2026, 2025):          # نجرّب الموسم الحالي ثم السابق
+        for season in (2024,):               # الخطة المجانية تسمح بـ 2022 إلى 2024 فقط
             if not use_request_budget(db, today_str):
                 break
             r = requests.get(
