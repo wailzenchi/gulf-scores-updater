@@ -18,7 +18,7 @@ CLUB_LEAGUES = [307, 305, 301]   # السعودية، قطر، الإمارات
 # (مثل: Saudi Arabia U23 أو Qatar W) لأننا نبحث عن الاسم داخل اسم الفريق
 NATIONAL_KEYWORDS = [
     "saudi arabia", "qatar", "united arab emirates", "uae",
-    "kuwait", "bahrain", "oman",
+    "kuwait", "bahrain", "oman" "las palmas",
 ]
 
 DAILY_LIMIT = 90                # حد أمان أقل من 100
