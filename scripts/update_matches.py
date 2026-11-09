@@ -186,7 +186,7 @@ def main():
     all_items = fetch_fixtures(today_str)
     print(f"إجمالي مباريات العالم اليوم: {len(all_items)}")
 
-    items = [i for i in all_items if is_gulf_match(i, club_ids)]
+        items = all_items[:5]   # اختبار مؤقت: أول 5 مباريات مهما كانت
     print(f"عدد مباريات الفرق الخليجية اليوم: {len(items)}")
     for i in items:
         print(f" - {i['teams']['home']['name']} × {i['teams']['away']['name']} | {i['league']['name']}")
